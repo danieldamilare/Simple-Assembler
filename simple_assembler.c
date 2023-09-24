@@ -9,9 +9,7 @@
 
 
 /* type declaration */
-typedef struct label {char * name; int pos;} label_t;
 typedef struct dstring{int length; int size; char * content;} dstr;
-struct table{ label_t label[100]; int count;};
 
 /* function definition */
 void  parse_line(char *);
@@ -21,7 +19,6 @@ void dec(char * instruction);
 void jmp(char * instruction); 
 void cmp(char * instruction); 
 void jump(char * label);
-void label(char * instruction);
 void process_jump(char * instruction); 
 char * lstrip(char * word); 
 void command(char * instruction);
@@ -31,12 +28,13 @@ void ret(char * instruction);
 
 /* global variables */
 dstr * output =  NULL; 
-int reg[65536] = {0};
+int reg[128] = {0};
 int cur_line = 0;
 int stack[100] = {0};
 int stack_top = 0;
+int total_line = 0;
 int cmp_flag = 0;
-struct table TABLE = {.count = 0}; 
+char ** code;
 
 int append_string(dstr ** str, char * word){
     if(*str == NULL){
@@ -63,21 +61,6 @@ int append_string(dstr ** str, char * word){
     return 0;
 }
 
-void add_label(char * name, int pos){
-    TABLE.label[TABLE.count].name = name;
-    TABLE.label[TABLE.count].pos = pos;
-    TABLE.count++;
-}
-
-int get_label(char * name){
-    for(int i = 0; i < TABLE.count; i++){
-        if(strcmp(TABLE.label[i].name, name) == 0)
-            return TABLE.label[i].pos;
-    }
-    return -1;
-}
-
-
 int count_word(char *word){
     char * dup = strdup(word);
     int i = 1;
@@ -92,7 +75,7 @@ void parse_line(char * instruction){
     char * s = lstrip(instruction);
 
     if(strncmp(s, "mov", 3) == 0 || strncmp(s, "add", 3) == 0|| strncmp(s, "mul", 3) == 0 
-       || strncmp(s, "div", 3) == 0 || strncmp(s, "cmp", 3) == 0)
+       || strncmp(s, "div", 3) == 0 || strncmp(s, "cmp", 3) == 0 || strncmp(s, "sub", 3) == 0)
         command(s);
 
     else if(strncmp(s, "jmp", 3) == 0 || strncmp(s, "jne", 3) == 0 || strncmp(s, "jge", 3) == 0
@@ -106,8 +89,6 @@ void parse_line(char * instruction){
     else if(strncmp(s, "ret", 3) == 0) ret(s);
     else if(s[0] == ';')
         ; //ignore comment
-    else
-        if(strchr(s, ':')) label(instruction);
 }
 
 void inc(char *instruction) {
@@ -176,16 +157,6 @@ void command(char * instruction){
     free(temp);
 }
 
-void label(char * instruction){
-    char * ptr = strchr(instruction, ':');
-    char  word[ptr-instruction];
-    for(char * s = instruction, * w = word; s < ptr; s++)
-       *w = *s; 
-    if(get_label(word) != -1)return;
-    char * new = strdup(word);
-    add_label(new, cur_line);
-}
-
 void msg(char * instruction){
     int size = 100;
     char * word =malloc(size);
@@ -222,21 +193,26 @@ void msg(char * instruction){
 
 void ret(char * instruction){
     if(stack_top == 0) return;
-    else cur_line = stack[stack_top] -1; 
+    else cur_line = stack[--stack_top]; 
 }
 
 void jump(char * label){
     int pos;
-    if((pos = get_label(label)) == -1) return;
-    cur_line = pos -1;
+    char new_word[strlen(label) + 2]; 
+    sprintf(new_word, "%s:", label);
+    for( pos = 0; pos < total_line; pos++){
+        if(strcmp(code[pos], new_word) == 0){
+            cur_line = pos-1;
+            return;
+        }
+    }
 }
 
 void process_jump(char * instruction){
     char * temp = strdup(instruction);
     char * jmp_cmd = strtok(temp, " ");
     char * label = strtok(NULL, " ");
-
-    if(get_label(label) == -1) return;
+    label = lstrip(label);
 
     if(strncmp(jmp_cmd, "jne", 3) == 0){
         if(cmp_flag != 0)jump(label);
@@ -270,17 +246,19 @@ char * lstrip(char * word){
     return word;
 } 
 
-char * simple_assembler(const char * program){
+char * assembler_interpreter(const char * program){
     char * temp  = strdup(program);
-    int lines = count_word(temp), i = 0;
-    char * codefile[lines];
+     total_line = count_word(temp);
+     int i = 0;
+    char * codefile[total_line];
+    code = codefile;
     char * word = strtok(temp, "\n");
     while(word){
         codefile[i++] = word;
         word = strtok(NULL, "\n");
     }
 
-    for(cur_line = 0; cur_line < lines; cur_line++){
+    for(cur_line = 0; cur_line < total_line; cur_line++){
         if(strncmp(codefile[cur_line], "end", 3) == 0) break;
         parse_line(codefile[cur_line]);
     }
@@ -293,7 +271,55 @@ char * simple_assembler(const char * program){
 }
 
 int main(void){
-    char * word = simple_assembler("; My first program\nmov  a, 5\ninc  a\ncall function\nmsg  '(5+1)/2 = ', a    ; output message\nend\nfunction:\ndiv  a, 2\nret");
+    char * word = simple_assembler(
+            "\
+mov   a, 81         ; value1\n\
+mov   b, 153        ; value2\n\
+call  init\n\
+call  proc_gcd\n\
+call  print\n\
+end\n\
+\n\
+proc_gcd:\n\
+    cmp   c, d\n\
+    jne   loop\n\
+    ret\n\
+\n\
+loop:\n\
+    cmp   c, d\n\
+    jg    a_bigger\n\
+    jmp   b_bigger\n\
+\n\
+a_bigger:\n\
+    sub   c, d\n\
+    jmp   proc_gcd\n\
+\n\
+b_bigger:\n\
+    sub   d, c\n\
+    jmp   proc_gcd\n\
+\n\
+init:\n\
+    cmp   a, 0\n\
+    jl    a_abs\n\
+    cmp   b, 0\n\
+    jl    b_abs\n\
+    mov   c, a            ; temp1\n\
+    mov   d, b            ; temp2\n\
+    ret\n\
+\n\
+a_abs:\n\
+    mul   a, -1\n\
+    jmp   init\n\
+\n\
+b_abs:\n\
+    mul   b, -1\n\
+    jmp   init\n\
+\n\
+print:\n\
+    msg   'gcd(', a, ', ', b, ') = ', c\n\
+    ret\n\
+"
+);
     printf("reg a: %d\n", reg[(int)'a']);
     printf("word: %s\n", word);
 }
