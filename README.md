@@ -1,8 +1,8 @@
 ##  Simple Assembler Interpreter
-The assembler support the following instructions:
+Support the following instructions:
 
 ```mov x, y``` - copy y (either an integer or the value of a register) into register x.
-```inc x- increase the content of register x by one.
+```inc x``` - increase the content of register x by one.
 ```idec x```- decrease the content of register x by one.
 ```add x, y``` - add the content of the register x with y (either an integer or the value of a register) and stores the result in x (i.e. register[x] += y).
 ```sub x, y``` - subtract y (either an integer or the value of a register) from the register x and stores the result in x (i.e. register[x] -= y).
