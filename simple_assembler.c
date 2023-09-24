@@ -29,7 +29,8 @@ void call(char * instructions);
 void call(char * instructions);
 void call(char * instructions);
 void call(char * instructions);
-void command(char * instructions, char * op);
+void jump(char * label);
+void command(char * instructions);
 
 
 /* global variables */
@@ -80,9 +81,6 @@ int count_word(char *word){
 void parse_line(char * instruction){
 }
 
-void mov(char * instruction){
-    command(instruction, "mov");
-}
 
 void inc(char *instruction) {
     char c;
@@ -96,7 +94,7 @@ void dec(char *instruction) {
     reg[c]--;
 }
 
-void command(char * instruction, char * op){
+void command(char * instruction){
     char * temp = strdup(instruction); 
     char * temp_arr[3];
     temp_arr[0] = strtok(temp, " ");
@@ -115,28 +113,22 @@ void command(char * instruction, char * op){
     else
       value2= atoi(temp_arr[2]);
 
-    if(strcmp(op,  "add") == 0) 
+    if(strncmp(temp_arr[0],  "add", 3) == 0) 
         reg[(int)temp_arr[1][0]] += value2;
-    if(strcmp(op, "sub") == 0)
+    if(strncmp(temp_arr[0], "sub", 3) == 0)
         reg[(int)temp_arr[1][0]] -= value2;
-    if(strcmp(op, "mul") == 0)
+    if(strncmp(temp_arr[0], "mul", 3) == 0)
         reg[(int)temp_arr[1][0]] *= value2;
-    if(strcmp(op, "mov") == 0)
+    if(strncmp(temp_arr[0], "mov", 3) == 0)
         reg[(int)temp_arr[1][0]] = value2;
-    if(strcmp(op, "div") == 0)
+    if(strncmp(temp_arr[0], "div", 3) == 0)
         reg[(int)temp_arr[1][0]] /= (value2 != 0? value2 : 1);
-    if (strcmp(op, "cmp") == 0)
+    if (strncmp(temp_arr[0], "cmp", 3) == 0)
         cmp_flag = value1 < value2? 1: value1 > value2 ? 2: 0;
 
 
     free(temp);
 }
-
-void sub(char * instruction){ command(instruction, "sub");}
-void add(char * instruction){ command(instruction, "add"); }
-void mul(char * instruction){ command(instruction, "mul"); }
-void div_reg(char * instruction){ command(instruction, "div");}
-void cmp(char * instruction) {command(instruction, "cmp");}
 
 void label(char * instruction){
     char * ptr = strchr(instruction, ':');
@@ -146,6 +138,21 @@ void label(char * instruction){
     if(get_label(word) == -1)return;
     char * new = strdup(word);
     add_label(new, cur_line);
+}
+
+void call(char * instruction){
+    char * temp = strdup(instruction);
+    strtok(temp, " ");
+    char * label = strtok(NULL, " ");
+    stack[stack_top++] = cur_line;
+    jump(label);
+    free(temp);
+}
+
+void process_jump(char * instruction){
+    char * temp = instruction;
+    char * jmp_cmd = strtok(temp, " ");
+    char * label = strtok(NULL, " ");
 }
 
 
@@ -159,9 +166,13 @@ char * simple_assembler(const char * program){
         word = strtok(NULL, "\n");
     }
 
-    for(int i = 0; i < lines; i++){
-        cur_line = i;
+    for(cur_line = 0; cur_line < lines; cur_line++){
         parse_line(codefile[i]);
     }
 }
 
+void jump(char * label){
+    int pos;
+    if((pos = get_label(label)) == -1) return;
+    cur_line = pos -1;
+}
