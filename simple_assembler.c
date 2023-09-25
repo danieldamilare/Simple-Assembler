@@ -11,6 +11,10 @@
 /* type declaration */
 typedef struct dstring{int length; int size; char * content;} dstr;
 
+struct abuf {
+  char *b;
+  int len;
+};
 /* function definition */
 void  parse_line(char *);
 int count_word(char * word);
@@ -22,12 +26,12 @@ void jump(char * label);
 void process_jump(char * instruction); 
 char * lstrip(char * word); 
 void command(char * instruction);
-int append_string(dstr ** str, char * word);
 void msg(char * instruction);
 void ret(char * instruction);
 
 /* global variables */
-dstr * output =  NULL; 
+
+struct abuf output = {NULL, 0};
 int reg[128] = {0};
 int cur_line = 0;
 int stack[100] = {0};
@@ -36,33 +40,21 @@ int total_line = 0;
 int cmp_flag = 0;
 char ** code;
 
-int append_string(dstr ** str, char * word){
-    if(*str == NULL){
-        *str = malloc(sizeof(dstr));
-        if(*str == NULL) return -1;
-        (*str)->size = 50;
-        (*str)->content = malloc((*str)->size);
-        if((*str)->content == NULL) {
-            free(*str);
-            return -1;
-        }
-        (*str)->length = 0;
-    }
-    int length = (*str)->length + strlen(word);
-    if(length > (*str)->size){
-       char * new_str = realloc((*str)->content, length + 50);
-       if(new_str == NULL) return -1;
-       (*str)->content = new_str;
-       (*str)->size = length+50;
-    }
-    memcpy((*str)->content+(*str)->length, word, strlen(word));
-    (*str)->length = length;
-    (*str)->content[length] ='\0';
-    return 0;
+void append_string(struct abuf *ab, const char *s) {
+  int len = strlen(s); 
+  char *new = realloc(ab->b, ab->len + len);
+  if (new == NULL) return;
+  memcpy(&new[ab->len], s, len);
+  ab->b = new;
+  ab->len += len;
 }
-
+void abFree(struct abuf *ab) {
+  free(ab->b);
+}
 int count_word(char *word){
+    if(word == NULL) return 0;
     char * dup = strdup(word);
+    if(dup == NULL) return 0;
     int i = 1;
     strtok(dup, "\n");
     while(strtok(NULL, "\n")) i++;
@@ -71,7 +63,7 @@ int count_word(char *word){
 }
 
 void parse_line(char * instruction){
-    printf("In parse line: instruction: %s\n", instruction);
+    if(instruction == NULL)return; 
     char * s = lstrip(instruction);
 
     if(strncmp(s, "mov", 3) == 0 || strncmp(s, "add", 3) == 0|| strncmp(s, "mul", 3) == 0 
@@ -104,12 +96,12 @@ void dec(char *instruction) {
 }
 
 void command(char * instruction){
-    printf("In command\n");
     char * temp = strdup(instruction); 
+    if(temp == NULL) return;
     char * temp_arr[3];
-    temp_arr[0] = strtok(temp, " ");
-    temp_arr[1] = strtok(NULL, " ");
-    temp_arr[2] = strtok(NULL, " ");
+    temp_arr[0] = lstrip(strtok(temp, " "));
+    temp_arr[1] = lstrip(strtok(NULL, " ,"));
+    temp_arr[2] = lstrip(strtok(NULL, " ,"));
     int value2; 
     int value1;
 
@@ -125,32 +117,26 @@ void command(char * instruction){
 
     if(strncmp(temp_arr[0],  "add", 3) == 0) 
     {
-        printf("Adding\n");
         reg[(int)temp_arr[1][0]] += value2;
     }
     else if(strncmp(temp_arr[0], "sub", 3) == 0)
     {
-        printf("Subtracting\n");
         reg[(int)temp_arr[1][0]] -= value2;
     }
     else if(strncmp(temp_arr[0], "mul", 3) == 0)
     {
-        printf("MUltiplying\n");
         reg[(int)temp_arr[1][0]] *= value2;
     }
     else if(strncmp(temp_arr[0], "mov", 3) == 0)
     {
-        printf("Moving\n");
         reg[(int)temp_arr[1][0]] = value2;
     }
     else if(strncmp(temp_arr[0], "div", 3) == 0)
     {
-        printf("Dividing\n");
         reg[(int)temp_arr[1][0]] /= (value2 != 0? value2 : 1);
     }
     else if (strncmp(temp_arr[0], "cmp", 3) == 0)
     {
-        printf("comparing\n");
         cmp_flag = value1 < value2? 1: value1 > value2 ? 2: 0;
    }
 
@@ -160,6 +146,7 @@ void command(char * instruction){
 void msg(char * instruction){
     int size = 100;
     char * word =malloc(size);
+    if(word ==NULL) return;
     int index = 0;   
     char * ptr = instruction+3;
     int in_string = 0;
@@ -210,6 +197,7 @@ void jump(char * label){
 
 void process_jump(char * instruction){
     char * temp = strdup(instruction);
+    if(temp == NULL)return;
     char * jmp_cmd = strtok(temp, " ");
     char * label = strtok(NULL, " ");
     label = lstrip(label);
@@ -242,14 +230,16 @@ void process_jump(char * instruction){
 }
 
 char * lstrip(char * word){
-    while(*word == ' ') word++;
+    while(isspace(*word))word++;
     return word;
 } 
 
 char * assembler_interpreter(const char * program){
+    int end_flag = 0;
     char * temp  = strdup(program);
-     total_line = count_word(temp);
-     int i = 0;
+    if(temp == NULL) return NULL;
+    total_line = count_word(temp);
+    int i = 0;
     char * codefile[total_line];
     code = codefile;
     char * word = strtok(temp, "\n");
@@ -259,67 +249,47 @@ char * assembler_interpreter(const char * program){
     }
 
     for(cur_line = 0; cur_line < total_line; cur_line++){
-        if(strncmp(codefile[cur_line], "end", 3) == 0) break;
+        if(strncmp(codefile[cur_line], "end", 3) == 0){
+            end_flag=1;
+            break;
+        } 
         parse_line(codefile[cur_line]);
     }
     free(temp);
-    if(output == NULL) return default_return; 
-    char * return_str = strdup(output->content); //to be free by caller
-    free(output->content);
-    free(output);
-    return return_str; 
+
+    if(end_flag){
+        if(output.b)
+            return output.b;
+        else return strdup("");
+    }
+    abFree(&output);
+    return default_return; 
+   
 }
 
+
 int main(void){
-    char * word = simple_assembler(
-            "\
-mov   a, 81         ; value1\n\
-mov   b, 153        ; value2\n\
-call  init\n\
-call  proc_gcd\n\
-call  print\n\
+    char * word = assembler_interpreter(\
+"mov h, 15   ; instruction mov h, 15\n\
+mov p, 7   ; instruction mov p, 7\n\
+call func\n\
+msg 'Random result: ', v\n\
 end\n\
-\n\
-proc_gcd:\n\
-    cmp   c, d\n\
-    jne   loop\n\
-    ret\n\
-\n\
-loop:\n\
-    cmp   c, d\n\
-    jg    a_bigger\n\
-    jmp   b_bigger\n\
-\n\
-a_bigger:\n\
-    sub   c, d\n\
-    jmp   proc_gcd\n\
-\n\
-b_bigger:\n\
-    sub   d, c\n\
-    jmp   proc_gcd\n\
-\n\
-init:\n\
-    cmp   a, 0\n\
-    jl    a_abs\n\
-    cmp   b, 0\n\
-    jl    b_abs\n\
-    mov   c, a            ; temp1\n\
-    mov   d, b            ; temp2\n\
-    ret\n\
-\n\
-a_abs:\n\
-    mul   a, -1\n\
-    jmp   init\n\
-\n\
-b_abs:\n\
-    mul   b, -1\n\
-    jmp   init\n\
-\n\
-print:\n\
-    msg   'gcd(', a, ', ', b, ') = ', c\n\
-    ret\n\
-"
+func:\n\
+	cmp h, p\n\
+	jl exit\n\
+	mov v, h\n\
+	sub v, p\n\
+	ret\n\
+; Do nothing\n\
+exit:\n\
+	msg 'Do nothing'\n"
 );
     printf("reg a: %d\n", reg[(int)'a']);
+    if(word == default_return){
+        printf("Passed Test!\n");
+        return 0;
+    }
     printf("word: %s\n", word);
+    free(word);
 }
