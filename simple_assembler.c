@@ -230,6 +230,7 @@ void process_jump(char * instruction){
 }
 
 char * lstrip(char * word){
+    if(word == NULL || strlen(word) ==0)  return NULL;
     while(isspace(*word))word++;
     return word;
 } 
@@ -257,7 +258,7 @@ char * assembler_interpreter(const char * program){
     }
     free(temp);
 
-    if(end_flag){
+    if(end_flag){ //if end in code return output 
         if(output.b)
             return output.b;
         else return strdup("");
