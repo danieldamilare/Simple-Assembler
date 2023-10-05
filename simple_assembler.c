@@ -49,7 +49,8 @@ void append_string(struct abuf *ab, const char *s) {
   ab->len += len;
 }
 void abFree(struct abuf *ab) {
-  free(ab->b);
+    if(ab->b)
+        free(ab->b);
 }
 int count_word(char *word){
     if(word == NULL) return 0;
